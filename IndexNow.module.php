@@ -16,27 +16,27 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $this->indexNowAllowedTemplates = [];
 
     $this -> timeFuncs = [
-      'every30Seconds' => _('every 30 seconds'),
-      'everyMinute' => _('every minute'),	
-      'every2Minutes' => _('every 2 minutes'),
-      'every3Minutes' => _('every 3 minutes'),
-      'every4Minutes' => _('every 4 minutes'),
-      'every5Minutes' => _('every 5 minutes'),
-      'every10Minutes' => _('every 10 minutes'),
-      'every15Minutes' => _('every 15 minutes'),
-      'every30Minutes' => _('every 30 minutes'),
-      'every45Minutes' => _('every 45 minutes'),
-      'everyHour' => _('every hour'),
-      'every2Hours' => _('every 2 hours'),
-      'every4Hours' => _('every 4 hours'),
-      'every6Hours' => _('every 6 hours'),
-      'every12Hours' => _('every 12 hours'),
-      'everyDay' => _('every day'),
-      'every2Days' => _('every 2 days'),	
-      'every4Days' => _('every 4 days'),
-      'everyWeek' => _('every week'),
-      'every2Weeks' => _('every 2 weeks'),
-      'every4Weeks' => _('every 4 weeks')
+      'every30Seconds' => $this->_('every 30 seconds'),
+      'everyMinute' =>    $this->_('every minute'),	
+      'every2Minutes' =>  $this->_('every 2 minutes'),
+      'every3Minutes' =>  $this->_('every 3 minutes'),
+      'every4Minutes' =>  $this->_('every 4 minutes'),
+      'every5Minutes' =>  $this->_('every 5 minutes'),
+      'every10Minutes' => $this->_('every 10 minutes'),
+      'every15Minutes' => $this->_('every 15 minutes'),
+      'every30Minutes' => $this->_('every 30 minutes'),
+      'every45Minutes' => $this->_('every 45 minutes'),
+      'everyHour' =>      $this->_('every hour'),
+      'every2Hours' =>    $this->_('every 2 hours'),
+      'every4Hours' =>    $this->_('every 4 hours'),
+      'every6Hours' =>    $this->_('every 6 hours'),
+      'every12Hours' =>   $this->_('every 12 hours'),
+      'everyDay' =>       $this->_('every day'),
+      'every2Days' =>     $this->_('every 2 days'),	
+      'every4Days' =>     $this->_('every 4 days'),
+      'everyWeek' =>      $this->_('every week'),
+      'every2Weeks' =>    $this->_('every 2 weeks'),
+      'every4Weeks' =>    $this->_('every 4 weeks')
     ];
   }
   
@@ -105,11 +105,11 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     foreach($json as $hostname => $jsonHostname) {
       if(!$fc = file_get_contents($hostname.'/'.$jsonHostname['key'].'.txt')) {
-        $this->wire()->log(_(sprintf('[IndexNow Cron %s] IndexNow key file does not exist.', $hostname)));
+        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file does not exist.'), $hostname));
         continue;
       }
       if($fc !== $jsonHostname['key']) {
-        $this->wire()->log(_(sprintf('[IndexNow Cron %s] IndexNow key file content does not match specification.', $hostname)));
+        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file content does not match specification.'), $hostname));
         continue;
       }
 
@@ -129,7 +129,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
           $response = curl_exec($ch);
         }
         catch(\Exception $e) {
-          $this->wire()->log(_(sprintf('[IndexNow Cron %s] Curl-Error: %s', $hostname, $e->getMessage())));
+          $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Curl-Error: %s'), $hostname, $e->getMessage()));
           return;
         }
   
@@ -165,7 +165,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
           $query->execute(array_merge($params, $in_params));
   
         } catch(\Exception $e) {
-          $this->wire()->log(_(sprintf('[IndexNow Cron %s] Database-Error: %s', $hostname, $e->getMessage())));
+          $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Error: %s'), $hostname, $e->getMessage()));
           return;
         }
       }
@@ -185,7 +185,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $stmt->bindValue(':daysToDeleteOldEntries', $this->get('daysToDeleteOldEntries'), \PDO::PARAM_INT);
       $stmt->execute();
     } catch(\Exception $e) {
-      $this->wire()->log(_(sprintf('[IndexNow Cron %s] Database-Cleanup-Error: %s', $hostname, $e->getMessage())));
+      $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Cleanup-Error: %s'), $hostname, $e->getMessage()));
       return;
     }
   }
@@ -280,38 +280,47 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     $indexNowKey = $this->get('indexNowKey');
     if(empty($indexNowKey)) {
-      $this->error(_('Your IndexNow key is not defined. Please set it in the module settings.'));
+      $this->error($this->_('Your IndexNow key is not defined. Please set it in the module settings.'));
       return FALSE;
     }
 
     $indexNowKeyFile = $this->wire::getRootPath().$indexNowKey.'.txt';
     if(file_exists($indexNowKeyFile)) {
       if(!$fp = fopen($indexNowKeyFile, 'r')) {
-        $this->error(_('Your IndexNow key file can\'t be opened. Check if it exists. Path: '.$indexNowKeyFile));
+        $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened. Check if it exists. Path: $%'), $indexNowKeyFile));
         return FALSE;
       }
 
       $contents = fread($fp, filesize($indexNowKeyFile));
       if($contents !== $indexNowKey) {
-        $this->error(_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: '.$indexNowKeyFile));
+        $this->error(sprintf($this->_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: %s'), $indexNowKeyFile));
         return FALSE;
       }
+
+      if($contents !== $indexNowKey) {
+        $this->error(sprintf($this->_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: %s'), $indexNowKeyFile));
+        return FALSE;
+      }
+
+      if(!file_get_contents($this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt')) {
+        $this->error(sprintf($this->_('Your IndexNow key file can\'t be accessed via HTTP. Please check the permissions. Path: %s'), $this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt'));
+      }      
 
       return TRUE;
     }
 
     if(!is_writable($indexNowKeyFile)) {
-      $this->error(_('The path of your IndexNow key file can\'t be written. Please create it manually. Path: '.$indexNowKeyFile));
+      $this->error(sprintf($this->_('The path of your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
       return FALSE;
     }
 
     if(!$fp = fopen($indexNowKeyFile, 'w')) {
-      $this->error(_('Your IndexNow key file can\'t be opened to write. Please create it manually. Path: '.$indexNowKeyFile));
+      $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened to write. Please create it manually. Path: %s'), $indexNowKeyFile));
       return FALSE;
     }
       
     if (fwrite($fp, $indexNowKey) === FALSE) {
-      $this->error(_('Your IndexNow key file can\'t be written. Please create it manually. Path: '.$indexNowKeyFile));
+      $this->error(sprintf($this->_('Your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
       return FALSE;
     }
   
@@ -334,7 +343,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $this->indexNowKeyGenerate === 1
     ) {
       $this->set('indexNowKey', $this->generateIndexNowKey());
-      $this->message(_('Your IndexNow key has been generated: '.$this->get('indexNowKey')));
+      $this->message($this->_('Your IndexNow key has been generated: '.$this->get('indexNowKey')));
       $modules -> saveConfig('IndexNow', 'indexNowKey', $this->get('indexNowKey'));
 
       $this->set('indexNowKeyGenerate', 0);
@@ -354,7 +363,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
         $this->checkAndWriteFile();
       }
       else {
-        $this->warning(_('Your IndexNow key is not defined. Please set it in the module settings.'));
+        $this->warning($this->_('Your IndexNow key is not defined. Please set it in the module settings.'));
       }
     }
 */

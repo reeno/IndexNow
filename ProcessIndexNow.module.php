@@ -72,11 +72,12 @@ class ProcessIndexNow extends Process implements Module, ConfigurableModule {
       $ret = $table->render();
     }
     else {
-      $ret = '<p>'._('No URIs to show.').'</p>';
+      $ret = '<p>'.$this->_('No URIs to show.').'</p>';
     }
     
-    $ret .= '<p>'.sprintf(_('For explanations of response codes see <a href="%s">the help pages of IndexNow</a>.'), 'https://www.indexnow.org/documentation#response').'<p>';
-    $ret .= '<p>'.sprintf(_('<a href="%s">Status log at Bing</a>.'), 'https://www.bing.com/webmasters/indexnow?siteUrl='.urlencode($this->wire()->input->httpHostUrl())).'<p>';
+    
+    //$ret .= '<p>'.sprintf($this->_('For explanations of response codes see <a href="%s">the help pages of IndexNow</a>.'), 'https://www.indexnow.org/documentation#response').'<p>';
+    $ret .= '<p><a href="https://www.bing.com/webmasters/indexnow?siteUrl='.urlencode($this->wire()->input->httpHostUrl()).'">'.sprintf($this->_('Status log at Bing.'), ).'</a><p>';
 
 
     return $ret;

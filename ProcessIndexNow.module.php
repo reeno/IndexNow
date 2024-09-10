@@ -1,7 +1,7 @@
 <?php namespace ProcessWire;
 class ProcessIndexNow extends Process implements Module, ConfigurableModule {
 
-	public function __construct() {
+  public function __construct() {
     $this->indexNowReturnCodes = [
       200 => 'OK',
       202 => 'Accepted',
@@ -82,6 +82,6 @@ class ProcessIndexNow extends Process implements Module, ConfigurableModule {
     return $ret;
   }
 
-	public function getModuleConfigInputfields($inputfields) {
-	}
+  public function getModuleConfigInputfields($inputfields) {
+  }
 }

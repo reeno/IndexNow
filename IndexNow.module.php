@@ -2,10 +2,10 @@
 class IndexNow extends WireData implements Module, ConfigurableModule {
   private $timeFuncs = [];
 
-	/**
-	 * Construct
-	 */
-	public function __construct() {
+  /**
+   * Construct
+   */
+  public function __construct() {
     parent::__construct();
     $this->urisPerCron = 9000;
     $this->indexNowKey;
@@ -49,9 +49,9 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $this->pages->addHookAfter('Pages::added',   $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::new',     $this, 'processPageUpdate');
      
-		if($this->indexNowTimefunc) {
-			$this->addHookAfter('LazyCron::'.$this -> indexNowTimefunc, $this, 'processCron');
-		}
+    if($this->indexNowTimefunc) {
+      $this->addHookAfter('LazyCron::'.$this -> indexNowTimefunc, $this, 'processCron');
+    }
   }
 
   /*
@@ -360,10 +360,10 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 */
 
     /** @var \ProcessWire\InputfieldFieldset $fs */
-		$fs = $modules->get('InputfieldFieldset');
-		$fs->label = $this->_('IndexNow settings');
+    $fs = $modules->get('InputfieldFieldset');
+    $fs->label = $this->_('IndexNow settings');
 
-		$inputfields->add($fs);
+    $inputfields->add($fs);
     
     /*
     if(empty($this -> indexNowKey)) {
@@ -380,25 +380,25 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     }
     */
 
-		/** @var InputfieldText $f */
-		$f = $modules->get('InputfieldText');
-		$f_name = 'indexNowKey';
-		$f->name = $f_name;
-		$f->label = $this->_('Your IndexNow key');
+    /** @var InputfieldText $f */
+    $f = $modules->get('InputfieldText');
+    $f_name = 'indexNowKey';
+    $f->name = $f_name;
+    $f->label = $this->_('Your IndexNow key');
     $f->detail = $this->_('If you already have an IndexNow key enter it here or let the module generate one, see above.');
-		$f->inputType = 'text';
-		$f->value = $this -> get('indexNowKey');
-		$f->minlength = 8;
+    $f->inputType = 'text';
+    $f->value = $this -> get('indexNowKey');
+    $f->minlength = 8;
     $f->maxlength = 128;
     $f->columnWidth = 50;
-		$fs->add($f);
+    $fs->add($f);
 
 
-		/** @var InputfieldCheckboxes $f */
-		$f = $modules->get('InputfieldCheckboxes');
-		$f_name = 'indexNowAllowedTemplates';
-		$f->name = $f_name;
-		$f->label = $this->_('Allowed Templates'); 
+    /** @var InputfieldCheckboxes $f */
+    $f = $modules->get('InputfieldCheckboxes');
+    $f_name = 'indexNowAllowedTemplates';
+    $f->name = $f_name;
+    $f->label = $this->_('Allowed Templates'); 
     $f->detail = $this->_('Select the page templates which should be sent to IndexNow. Shows label and name of templates, number of pages using this template is shown in parentheses. System templates are excluded.');
     
     foreach($this->wire()->templates as $template) {
@@ -410,62 +410,62 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $f->addOption($template->name, $template->label.' / '.$template->name.' ('.$template->getNumPages().')');
     }
     
-		$f->value = $this -> get('indexNowAllowedTemplates');
+    $f->value = $this -> get('indexNowAllowedTemplates');
     $f->columnWidth = 50;
-		$fs->add($f);
+    $fs->add($f);
 
-		/** @var InputfieldSelect $f */
-		$f = $modules->get('InputfieldSelect');
-		$f_name = 'indexNowTimefunc';
-		$f->name = $f_name;
-		$f->label = $this->_('Timing schedule of cron'); 
+    /** @var InputfieldSelect $f */
+    $f = $modules->get('InputfieldSelect');
+    $f_name = 'indexNowTimefunc';
+    $f->name = $f_name;
+    $f->label = $this->_('Timing schedule of cron'); 
     $f->detail = $this->_('How often should should new/changed/deleted URIs be submitted to IndexNow? The value "Never" disables the cron. If you send too much changes to IndexNow, you might get an error "429 Too Many Requests" from the IndexNow API.');
     $f->addOption(null, $this->_('Never'));
     foreach($this -> timeFuncs as $key => $val) {
       $f->addOption($key, $val);
     }
-		$f->value = $this -> get('indexNowTimefunc');
+    $f->value = $this -> get('indexNowTimefunc');
     $f->columnWidth = 25;
-		$fs->add($f);
+    $fs->add($f);
 
-		/** @var InputfieldInteger $f */
-		$f = $modules->get('InputfieldInteger');
-		$f_name = 'urisPerCron';
-		$f->name = $f_name;
-		$f->label = $this->_('URIs per execution');
+    /** @var InputfieldInteger $f */
+    $f = $modules->get('InputfieldInteger');
+    $f_name = 'urisPerCron';
+    $f->name = $f_name;
+    $f->label = $this->_('URIs per execution');
     $f->detail = $this->_('Number of URIs which are sent to IndexNow during one LazyCron execution. IndexNow accepts not more than 10.000 per batch.');
-		$f->inputType = 'number';
-		$f->min = 1;
+    $f->inputType = 'number';
+    $f->min = 1;
     $f->max = 10000;
-		$f->value = $this -> urisPerCron ?: 9000;
-		$f->columnWidth = 25;
-		$fs->add($f);
+    $f->value = $this -> urisPerCron ?: 9000;
+    $f->columnWidth = 25;
+    $fs->add($f);
 
-		/** @var InputfieldInteger $f */
-		$f = $modules->get('InputfieldInteger');
-		$f_name = 'gracePeriod';
-		$f->name = $f_name;
-		$f->label = $this->_('Grace period after saving');
+    /** @var InputfieldInteger $f */
+    $f = $modules->get('InputfieldInteger');
+    $f_name = 'gracePeriod';
+    $f->name = $f_name;
+    $f->label = $this->_('Grace period after saving');
     $f->detail = $this->_('How many seconds should the module wait after saving a page before sending it to IndexNow? Prevents sending it to often to IndexNow when multiple changes occur within a short time period. Default is 600 seconds = 10 minutes.');
-		$f->inputType = 'number';
-		$f->min = 1;
+    $f->inputType = 'number';
+    $f->min = 1;
     $f->max = 10000;
-		$f->value = $this -> gracePeriod ?: 10*60;
-		$f->columnWidth = 25;
-		$fs->add($f);
+    $f->value = $this -> gracePeriod ?: 10*60;
+    $f->columnWidth = 25;
+    $fs->add($f);
 
-		/** @var InputfieldInteger $f */
-		$f = $modules->get('InputfieldInteger');
-		$f_name = 'daysToDeleteOldEntries';
-		$f->name = $f_name;
-		$f->label = $this->_('After how many days should old entries be deleted?');
+    /** @var InputfieldInteger $f */
+    $f = $modules->get('InputfieldInteger');
+    $f_name = 'daysToDeleteOldEntries';
+    $f->name = $f_name;
+    $f->label = $this->_('After how many days should old entries be deleted?');
     $f->detail = $this->_('The log table of IndexNow keeps track of all submitted pages. This table is cleaned up after a certain time. You can specify how many days old entries should be kept in the log.');
-		$f->inputType = 'number';
-		$f->min = 0;
+    $f->inputType = 'number';
+    $f->min = 0;
     //$f->max = 10000;
-		$f->value = $this -> daysToDeleteOldEntries ?: 10;
-		$f->columnWidth = 25;
-		$fs->add($f);
+    $f->value = $this -> daysToDeleteOldEntries ?: 10;
+    $f->columnWidth = 25;
+    $fs->add($f);
   }
 
   

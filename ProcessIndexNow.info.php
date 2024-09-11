@@ -3,7 +3,7 @@
 $info = [
   'title' => 'IndexNow: Process module',
   'summary' => 'Adds a small table to see the status of the IndexNow submissions.',
-  'version' => '0.0.2',
+  'version' => '0.1.0',
   'author' => 'Reeno',
   'icon' => 'clock-o',
   'requires' => 'ProcessWire>=3.0.0, PHP>=7.0.0, IndexNow',

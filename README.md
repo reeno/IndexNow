@@ -14,9 +14,12 @@ Multiple queued URLs are sent to IndexNow in one batch. See [*Submitting set of 
 
 [Multilanguage sites](https://processwire.com/docs/multi-language-support/) are supported.
 
+### What's the difference between IndexNow and a sitemap?
+With a sitemap file, the search engines **pull** your URIs, while with IndexNow you  **push** changed pages to the search engines. If your content changes rarely, you might not need this. But if you have a lot of changes and you want to notify search engines about them, this is the way to go.
+
 ## Configuration settings
 
-### IndexNow key
+### IndexNow API key
 #### Key Generation
 You need an API key to verify the ownership of your domain. You can just use *any* key or get one from [Bing's Getting Started page](https://www.bing.com/indexnow/getstarted#implementation). The key you generate there is not send to any sever or stored somewhere, so there's no need to "register" it somewhere.
 Enter the API key in the module settings.
@@ -33,17 +36,19 @@ Select the page templates of the pages which should be sent to IndexNow.
 ### Timing schedule of cron
 Lists the various options the LazyCron module provides when the cron should be executed. The value "Never" disables the cron.
 
-### URIs per execution
-Number of URIs which are sent to IndexNow during one LazyCron execution. IndexNow accepts not more than 10.000 per batch.
+### URIs per cron execution
+Number of URIs which are sent to IndexNow during one LazyCron execution. IndexNow accepts not more than 10.000 per batch. If you send too many changes to IndexNow, you might get an error "429 Too Many Requests" from the IndexNow API and thus you are blocked for some time.
 
 ### Grace period after saving
 How many seconds should the module wait after saving a page before sending it to IndexNow? Prevents sending it to often to IndexNow when multiple changes occur within a short time period.
+Avoid submitting the same URL many times a day. If you send too many changes to IndexNow, you might get an error "429 Too Many Requests" from the IndexNow API and thus you are blocked for some time.
 
-### After how many days should old entries be deleted?
+### Log cleaning period
 The log table of IndexNow keeps track of all submitted pages. This table is cleaned up after a certain time. You can specify how many days old entries should be kept in the log.
+Every URI is only listed once in ther table. So it is not a real log, as a new edit of a page "overwrites" the old submission log entry.
 
 ## Caveats
-The module sees which page was edited. It does not see, in which **other** pages this certain page is included. So if you e.g. create a blog entry, the module will send the blog entry to IndexNow but not the parent overview page.
+The module sees which page was edited. It does not see, in which **other** pages this certain page is included. So if you e.g. create a blog entry, the module will send the blog entry to IndexNow but not the parent blog overview page.
 
 
 ## Usage
@@ -51,5 +56,3 @@ Just add/edit/delete pages and the module will send the URIs – depending on th
 
 When submitting, IndexNow returns a HTTP status code. For a list of possible codes see [*Response format* in the IndexNow documentation](https://www.indexnow.org/documentation). The response code is written to your database and can be viewed through *Setup* > *IndexNow*.
 
-## What's the difference between IndexNow and a sitemap?
-With a sitemap file, the search engines **pull** your URIs, while with IndexNow you  **push** changed pages to the search engines. If your content changes rarely, you might not need this. But if you have a lot of changes and you want to notify search engines about them, this is the way to go.

@@ -17,26 +17,26 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     $this -> timeFuncs = [
       'every30Seconds' => $this->_('every 30 seconds'),
-      'everyMinute' =>    $this->_('every minute'),	
-      'every2Minutes' =>  $this->_('every 2 minutes'),
-      'every3Minutes' =>  $this->_('every 3 minutes'),
-      'every4Minutes' =>  $this->_('every 4 minutes'),
-      'every5Minutes' =>  $this->_('every 5 minutes'),
+      'everyMinute'    => $this->_('every minute'),	
+      'every2Minutes'  => $this->_('every 2 minutes'),
+      'every3Minutes'  => $this->_('every 3 minutes'),
+      'every4Minutes'  => $this->_('every 4 minutes'),
+      'every5Minutes'  => $this->_('every 5 minutes'),
       'every10Minutes' => $this->_('every 10 minutes'),
       'every15Minutes' => $this->_('every 15 minutes'),
       'every30Minutes' => $this->_('every 30 minutes'),
       'every45Minutes' => $this->_('every 45 minutes'),
-      'everyHour' =>      $this->_('every hour'),
-      'every2Hours' =>    $this->_('every 2 hours'),
-      'every4Hours' =>    $this->_('every 4 hours'),
-      'every6Hours' =>    $this->_('every 6 hours'),
-      'every12Hours' =>   $this->_('every 12 hours'),
-      'everyDay' =>       $this->_('every day'),
-      'every2Days' =>     $this->_('every 2 days'),	
-      'every4Days' =>     $this->_('every 4 days'),
-      'everyWeek' =>      $this->_('every week'),
-      'every2Weeks' =>    $this->_('every 2 weeks'),
-      'every4Weeks' =>    $this->_('every 4 weeks')
+      'everyHour'      => $this->_('every hour'),
+      'every2Hours'    => $this->_('every 2 hours'),
+      'every4Hours'    => $this->_('every 4 hours'),
+      'every6Hours'    => $this->_('every 6 hours'),
+      'every12Hours'   => $this->_('every 12 hours'),
+      'everyDay'       => $this->_('every day'),
+      'every2Days'     => $this->_('every 2 days'),
+      'every4Days'     => $this->_('every 4 days'),
+      'everyWeek'      => $this->_('every week'),
+      'every2Weeks'    => $this->_('every 2 weeks'),
+      'every4Weeks'    => $this->_('every 4 weeks')
     ];
   }
   
@@ -44,25 +44,30 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
    * Ready method. Sets hooks.
    */
   public function ready() {
+    // page hooks
     $this->pages->addHookAfter('Pages::saved',   $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::deleted', $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::added',   $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::new',     $this, 'processPageUpdate');
      
+    // cron hook
     if($this->indexNowTimefunc) {
       $this->addHookAfter('LazyCron::'.$this -> indexNowTimefunc, $this, 'processCron');
     }
   }
 
   /*
-   * Process the cron. Writes log entries if any errors occur.
+   * Process the cron.
+   * 
+   * Sends new URIs to IndexNow.
+   * Clears the log after a certain time.
+   * Writes log entries if any errors occur.
    */
   public function processCron() {
     $json = [];
     $ids = [];
 
-    $database = $this->wire()->database;
-
+    // only fetch what wasn't send already (response IS NULL) or sent with error (response > 202)
     $sql = '
       SELECT
         id,
@@ -84,7 +89,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     $stmt = $this->wire()->database->prepare($sql);
 
-    $stmt->bindValue(':limit', $this->get('urisPerCron'), \PDO::PARAM_INT); 
+    $stmt->bindValue(':limit',       $this->get('urisPerCron'), \PDO::PARAM_INT); 
     $stmt->bindValue(':gracePeriod', $this->get('gracePeriod'), \PDO::PARAM_INT);
 
     $stmt->execute();
@@ -103,75 +108,78 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $ids[$row['hostname']][] = $row['id'];
     }
 
+    // for each hostname
     foreach($json as $hostname => $jsonHostname) {
+      // check if key file exists and is accessible
       if(!$fc = file_get_contents($hostname.'/'.$jsonHostname['key'].'.txt')) {
         $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file does not exist.'), $hostname));
         continue;
       }
+
+      // check if key file content matches specification
       if($fc !== $jsonHostname['key']) {
         $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file content does not match specification.'), $hostname));
         continue;
       }
 
-      if(sizeof($jsonHostname['urlList']) !== 0) {
-        try {
-          $ch = curl_init();
-  
-          curl_setopt($ch, CURLOPT_URL, 'https://api.indexnow.org/indexnow');
-          curl_setopt($ch, CURLOPT_POST, 1);
-          curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            'Content-Type: application/json; charset=utf-8'
-          ));
-          curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($jsonHostname));
-          curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-          curl_setopt($ch, CURLOPT_HEADER, 1);
-  
-          $response = curl_exec($ch);
-        }
-        catch(\Exception $e) {
-          $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Curl-Error: %s'), $hostname, $e->getMessage()));
-          return;
-        }
-  
-        $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-  
-        // Binding if IN is tricky... See https://phpdelusions.net/pdo#in
-        $params = [':response' => $http_status];
-        $in = '';
-        $i = 0;
-        $in_params = [];
-  
-        foreach ($ids[$hostname] as $item) {
-            $key = ':id'.$i++;
-            $in .= ($in ? ',' : '') . $key; // :id0,:id1,:id2
-            $in_params[$key] = $item; // collecting values into a key-value array
-        }
-        $in = rtrim($in, ','); // :id0,:id1,:id2
-  
-        // Update database
-        try {
-          $sql = '
-            UPDATE
-              index_now
-            SET
-              response = :response,
-              submitted = CURRENT_TIMESTAMP
-            WHERE
-              id IN ('.$in.')
-          ';
-  
-          $query = $this->wire()->database->prepare($sql);
-          $query->execute(array_merge($params, $in_params));
-  
-        } catch(\Exception $e) {
-          $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Error: %s'), $hostname, $e->getMessage()));
-          return;
-        }
+      try {
+        $ch = curl_init();
+
+        curl_setopt($ch, CURLOPT_URL, 'https://api.indexnow.org/indexnow');
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+          'Content-Type: application/json; charset=utf-8'
+        ));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($jsonHostname));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+
+        $response = curl_exec($ch);
       }
+      catch(\Exception $e) {
+        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Curl-Error: %s'), $hostname, $e->getMessage()));
+        return;
+      }
+
+      $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+      curl_close($ch);
+
+      // Binding IN is tricky... See https://phpdelusions.net/pdo#in
+      $params = [':response' => $http_status];
+      $in = '';
+      $i = 0;
+      $in_params = [];
+
+      foreach ($ids[$hostname] as $item) {
+          $key = ':id'.$i++;
+          $in .= ($in ? ',' : '') . $key; // :id0,:id1,:id2
+          $in_params[$key] = $item; // collecting values into a key-value array
+      }
+      $in = rtrim($in, ','); // :id0,:id1,:id2
+
+      // Update database
+      try {
+        $sql = '
+          UPDATE
+            index_now
+          SET
+            response = :response,
+            submitted = CURRENT_TIMESTAMP
+          WHERE
+            id IN ('.$in.')
+        ';
+
+        $query = $this->wire()->database->prepare($sql);
+        $query->execute(array_merge($params, $in_params));
+
+      } catch(\Exception $e) {
+        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Error: %s'), $hostname, $e->getMessage()));
+        return;
+      }
+    
     }
 
-    // cleanup old entries
+    // cleanup old successful entries
     try {
       $sql = '
         DELETE FROM
@@ -200,20 +208,22 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     if(
       !in_array($page -> template -> name, $this -> get('indexNowAllowedTemplates')) // not allowed template
-      OR $page->rootParent()->id === 2 // admin page)
-      OR $page->isHidden() // hidden page
-      OR $page->isUnpublished() // unpublished page
+      OR  $page->rootParent()->id === 2 // admin page)
+      OR  $page->isHidden() // hidden page
+      OR  $page->isUnpublished() // unpublished page
       OR !$page->isPublic() // public and viewable by all
     ) {
       return;
     }
 
+    // fetch all uris of the current page
     foreach($page -> urls([
-      'http' => true,
-      'past' => false,
+      'http'      => true,
+      'past'      => false,
       'languages' => true
     ]) as $uri) { 
       try {
+        // Upsert
         $sql = '
           INSERT INTO index_now (
             pages_id,
@@ -248,7 +258,8 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
   /**
    * Generate a new IndexNow key
-   * Source for the function: https://stackoverflow.com/a/15875555
+   * Source: https://stackoverflow.com/a/15875555
+   * - Method is not used right now. -
    * 
    * @return string The new key
    */
@@ -256,75 +267,84 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $data = random_bytes(16);
     $data[6] = chr(ord($data[6]) & 0x0f | 0x40); // set version to 0100
     $data[8] = chr(ord($data[8]) & 0x3f | 0x80); // set bits 6-7 to 10
-      
-    //$uuid = implode('', explode('-', vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4))));
+
     $uuid = vsprintf('%s%s%s%s%s%s%s%s', str_split(bin2hex($data), 4));
 
     return $uuid;
   }
 
   /**
-   * Check if the IndexNow key file exists and is valid. If it doesn't exist, create it.
+   * Check if the IndexNow key file exists and is valid. If it doesn't exist, try to create it.
    * 
    * @param string $indexNowKey The IndexNow key
    * 
    * @return bool True if the file exists and is valid, false otherwise
    */
   public function checkAndWriteFile() {
-    // avoid calling it twice when saving settings
-    /*
-    if($_SERVER['REQUEST_METHOD'] === 'POST') {
-      return;
-    }
-    */
-
     $indexNowKey = $this->get('indexNowKey');
+
+    // Check if the key is defined
     if(empty($indexNowKey)) {
       $this->error($this->_('Your IndexNow key is not defined. Please set it in the module settings.'));
       return FALSE;
     }
 
+    // define file path
     $indexNowKeyFile = $this->wire::getRootPath().$indexNowKey.'.txt';
-    if(file_exists($indexNowKeyFile)) {
-      if(!$fp = fopen($indexNowKeyFile, 'r')) {
-        $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened. Check if it exists. Path: $%'), $indexNowKeyFile));
+
+    // file does not exist yet
+    if(!file_exists($indexNowKeyFile)) {
+
+      // check if the file is writeable
+      if(!is_writable($indexNowKeyFile)) {
+        $this->error(sprintf($this->_('The path of your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
         return FALSE;
       }
-
-      $contents = fread($fp, filesize($indexNowKeyFile));
-      if($contents !== $indexNowKey) {
-        $this->error(sprintf($this->_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: %s'), $indexNowKeyFile));
+  
+      // try to open for writing
+      if(!$fp = fopen($indexNowKeyFile, 'w')) {
+        $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened to write. Please create it manually. Path: %s'), $indexNowKeyFile));
         return FALSE;
       }
-
-      if($contents !== $indexNowKey) {
-        $this->error(sprintf($this->_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: %s'), $indexNowKeyFile));
+        
+      // write the contents
+      if (fwrite($fp, $indexNowKey) === FALSE) {
+        $this->error(sprintf($this->_('Your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
         return FALSE;
       }
+    
+      fclose($fp);
 
-      if(!file_get_contents($this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt')) {
-        $this->error(sprintf($this->_('Your IndexNow key file can\'t be accessed via HTTP. Please check the permissions. Path: %s'), $this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt'));
-      }      
-
+      // file was writeable and the content could be written
       return TRUE;
     }
 
-    if(!is_writable($indexNowKeyFile)) {
-      $this->error(sprintf($this->_('The path of your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
+    // try to open it for reading
+    if(!$fp = fopen($indexNowKeyFile, 'r')) {
+      $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened. Check if it exists. Path: $%'), $indexNowKeyFile));
       return FALSE;
     }
 
-    if(!$fp = fopen($indexNowKeyFile, 'w')) {
-      $this->error(sprintf($this->_('Your IndexNow key file can\'t be opened to write. Please create it manually. Path: %s'), $indexNowKeyFile));
+    $fs = filesize($indexNowKeyFile);
+    if($fs === 0) {
+      $this->error(sprintf($this->_('Your IndexNow key file exists but is empty. Please check the content. Path: %s'), $indexNowKeyFile));
       return FALSE;
     }
-      
-    if (fwrite($fp, $indexNowKey) === FALSE) {
-      $this->error(sprintf($this->_('Your IndexNow key file can\'t be written. Please create it manually. Path: %s'), $indexNowKeyFile));
+    // read the content
+    $contents = fread($fp, $fs);
+
+    // check if the content is the same as the key
+    if($contents !== $indexNowKey) {
+      $this->error(sprintf($this->_('Your IndexNow key file exists but has the wrong content. Please check the content. Path: %s'), $indexNowKeyFile));
       return FALSE;
     }
-  
-    fclose($fp);
+
+    // check if access via HTTP is possible
+    if(!file_get_contents($this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt')) {
+      $this->error(sprintf($this->_('Your IndexNow key file can\'t be accessed via HTTP. Please check the permissions. Path: %s'), $this->wire()->input->httpHostUrl().'/'.$indexNowKey.'.txt'));
+    }
+
+    // all went well
     return TRUE;
   }
   
@@ -334,67 +354,24 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
   public function getModuleConfigInputfields($inputfields) {
     $modules = $this->wire()->modules;
 
-    //$this->processCron();
-
-    // TODO does not work
-    /*
-    if(
-      !empty($this->indexNowKey) &&
-      $this->indexNowKeyGenerate === 1
-    ) {
-      $this->set('indexNowKey', $this->generateIndexNowKey());
-      $this->message($this->_('Your IndexNow key has been generated: '.$this->get('indexNowKey')));
-      $modules -> saveConfig('IndexNow', 'indexNowKey', $this->get('indexNowKey'));
-
-      $this->set('indexNowKeyGenerate', 0);
-      $modules -> saveConfig('IndexNow', 'indexNowKeyGenerate', $this->get('indexNowKeyGenerate'));
-    }
-    else {
-      //if(!empty($this->indexNowKey)) {
+    // only via GET so it doesn't get called twice when saving the module config
+    if($_SERVER['REQUEST_METHOD'] === 'GET') {
       $this->checkAndWriteFile();
     }
-    */
 
-    $this->checkAndWriteFile();
-
-    /*
-    if($_SERVER['REQUEST_METHOD'] === 'GET') {
-      if(!empty($this->get('indexNowKey'))) {
-        $this->checkAndWriteFile();
-      }
-      else {
-        $this->warning($this->_('Your IndexNow key is not defined. Please set it in the module settings.'));
-      }
-    }
-*/
-
-    /** @var \ProcessWire\InputfieldFieldset $fs */
+    /** @var InputfieldFieldset $fs */
     $fs = $modules->get('InputfieldFieldset');
     $fs->label = $this->_('IndexNow settings');
 
     $inputfields->add($fs);
-    
-    /*
-    if(empty($this -> indexNowKey)) {
-      /** @var InputfieldCheckbox $f *-/
-      $f = $modules->get('InputfieldCheckbox');
-      $f_name = 'indexNowKeyGenerate';
-      $f->name = $f_name;
-      $f->label = $this->_('Generate an IndexNow key');
-      $f->detail = $this->_('Either get an IndexNow key from IndexNow or let the module generate one.');
-      $f->inputType = 'checkbox';
-      $f->value = false;
-      $f->columnWidth = 100;
-      $fs->add($f);
-    }
-    */
 
     /** @var InputfieldText $f */
     $f = $modules->get('InputfieldText');
     $f_name = 'indexNowKey';
     $f->name = $f_name;
-    $f->label = $this->_('Your IndexNow key');
-    $f->detail = $this->_('If you already have an IndexNow key enter it here or let the module generate one, see above.');
+    $f->label = $this->_('IndexNow API key');
+    $f->detail = $this->_('Get an IndexNow API key and enter it here.');
+    // https://www.bing.com/indexnow/getstarted#implementation
     $f->inputType = 'text';
     $f->value = $this -> get('indexNowKey');
     $f->minlength = 8;
@@ -441,7 +418,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $f = $modules->get('InputfieldInteger');
     $f_name = 'urisPerCron';
     $f->name = $f_name;
-    $f->label = $this->_('URIs per execution');
+    $f->label = $this->_('URIs per cron execution');
     $f->detail = $this->_('Number of URIs which are sent to IndexNow during one LazyCron execution. IndexNow accepts not more than 10.000 per batch.');
     $f->inputType = 'number';
     $f->min = 1;
@@ -467,11 +444,10 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $f = $modules->get('InputfieldInteger');
     $f_name = 'daysToDeleteOldEntries';
     $f->name = $f_name;
-    $f->label = $this->_('After how many days should old entries be deleted?');
+    $f->label = $this->_('Log cleaning period');
     $f->detail = $this->_('The log table of IndexNow keeps track of all submitted pages. This table is cleaned up after a certain time. You can specify how many days old entries should be kept in the log.');
     $f->inputType = 'number';
     $f->min = 0;
-    //$f->max = 10000;
     $f->value = $this -> daysToDeleteOldEntries ?: 10;
     $f->columnWidth = 25;
     $fs->add($f);
@@ -479,7 +455,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
   
   /**
-  * Installation method
+  * Installation method. Creates the necessary database table.
   */
   public function ___install() {
     $len = $this->wire()->database->getMaxIndexLength();
@@ -510,7 +486,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
   }
 
   /**
-  * Uninstallation method
+  * Uninstallation method. Drops the created database table.
   */
   public function ___uninstall() {
     try {

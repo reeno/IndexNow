@@ -116,8 +116,6 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $ids[] = $row['id'];
     }
 
-    $this->wire()->log('IndexNow: =================================================================');
-
     // check if key file exists and is accessible
     if(!$fc = file_get_contents('http://'.$hostname.'/'.$json['key'].'.txt')) {
       $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file does not exist.'), $hostname));
@@ -129,8 +127,6 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
       $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file content does not match specification.'), $hostname));
       return;
     }
-
-    $this->wire()->log('IndexNow: json '.json_encode($json));
 
     try {
       $ch = curl_init();
@@ -179,8 +175,6 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
         WHERE
           id IN ('.$in.')
       ';
-
-      $this->wire()->log('IndexNow: sql: '.$sql);
 
       $query = $this->wire()->database->prepare($sql);
       $query->execute(array_merge($params, $in_params));

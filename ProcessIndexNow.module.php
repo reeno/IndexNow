@@ -56,7 +56,7 @@ class ProcessIndexNow extends Process implements Module, ConfigurableModule {
 
     while ($row = $stmt->fetch()) {
       $tsSaved = strtotime($row['saved']);
-      if(!is_null($tsSubmitted)) {
+      if(!is_null($row['submitted'])) {
         $tsSubmitted = strtotime($row['submitted']);
       }
 

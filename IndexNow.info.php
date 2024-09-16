@@ -3,7 +3,7 @@
 $info = [
   'title' => 'IndexNow',
   'summary' => 'Submits changes of pages to IndexNow',
-  'version' => '0.1.0',
+  'version' => '0.1.1',
   'author' => 'Reeno',
   'icon' => 'clock-o',
   'requires' => 'ProcessWire>=3.0.0, PHP>=7.0.0, LazyCron>=1.0.0',

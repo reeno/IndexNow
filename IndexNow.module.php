@@ -44,12 +44,14 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
    * Ready method. Sets hooks.
    */
   public function ready() {
-    // page hooks
-    $this->pages->addHookAfter('Pages::saved',   $this, 'processPageUpdate');
-    $this->pages->addHookAfter('Pages::deleted', $this, 'processPageUpdate');
-    $this->pages->addHookAfter('Pages::added',   $this, 'processPageUpdate');
-    $this->pages->addHookAfter('Pages::new',     $this, 'processPageUpdate');
-     
+    // page changes hooks
+    $this->pages->addHookAfter('Pages::save',   $this, 'processPageUpdate');
+    $this->pages->addHookAfter('Pages::add',    $this, 'processPageUpdate');
+    $this->pages->addHookAfter('Pages::new',    $this, 'processPageUpdate');
+    
+    // before as the page is not public anymore after trashing
+    $this->pages->addHookBefore('Pages::trash', $this, 'processPageUpdate');
+
     // cron hook
     if($this->indexNowTimefunc) {
       $this->addHookAfter('LazyCron::'.$this -> indexNowTimefunc, $this, 'processCron');
@@ -60,18 +62,14 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
    * Process the cron.
    * 
    * Sends new URIs to IndexNow.
-   * Clears the log after a certain time.
    * Writes log entries if any errors occur.
+   * Clears the log after a certain time.   
    */
   public function processCron() {
-    $json = [];
-    $ids = [];
-
     // only fetch what wasn't send already (response IS NULL) or sent with error (response > 202)
     $sql = '
       SELECT
         id,
-        hostname,
         url
       FROM
         index_now
@@ -94,91 +92,104 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     $stmt->execute();
 
+    $hostname= null;
+    $ids = [];
+    $json = [
+      'host'    => null,
+      'key'     => $this->get('indexNowKey'),
+      'urlList' => []
+    ];
+
     while ($row = $stmt->fetch()) {
-      if(!isset($json[$row['hostname']])) {
-        $json[$row['hostname']] = [
-          'host'    => $row['hostname'],
-          'key'     => $this->get('indexNowKey'),
-          'urlList' => []
-        ];
-        $ids[$row['hostname']] = [];
+      // hostname not set yet
+      if($hostname === null) {
+        $hostname = parse_url($row['url'], PHP_URL_HOST);
+        $json['host'] = $hostname;
+      /* hostname already set
+       * check if the new row has another hostname. Should never happen, but just in case... */
+      } elseif($hostname !== parse_url($row['url'], PHP_URL_HOST)) {
+        // if hostnames are different, skip this row and run it in the next cron execution
+        continue;
       }
 
-      $json[$row['hostname']]['urlList'][] = $row['url'];
-      $ids[$row['hostname']][] = $row['id'];
+      $json['urlList'][] = $row['url'];
+      $ids[] = $row['id'];
     }
 
-    // for each hostname
-    foreach($json as $hostname => $jsonHostname) {
-      // check if key file exists and is accessible
-      if(!$fc = file_get_contents($hostname.'/'.$jsonHostname['key'].'.txt')) {
-        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file does not exist.'), $hostname));
-        continue;
-      }
+    $this->wire()->log('IndexNow: =================================================================');
 
-      // check if key file content matches specification
-      if($fc !== $jsonHostname['key']) {
-        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file content does not match specification.'), $hostname));
-        continue;
-      }
+    // check if key file exists and is accessible
+    if(!$fc = file_get_contents('http://'.$hostname.'/'.$json['key'].'.txt')) {
+      $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file does not exist.'), $hostname));
+      return;
+    }
 
-      try {
-        $ch = curl_init();
+    // check if key file content matches specification
+    if($fc !== $json['key']) {
+      $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] IndexNow key file content does not match specification.'), $hostname));
+      return;
+    }
 
-        curl_setopt($ch, CURLOPT_URL, 'https://api.indexnow.org/indexnow');
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-          'Content-Type: application/json; charset=utf-8'
-        ));
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($jsonHostname));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_HEADER, 1);
+    $this->wire()->log('IndexNow: json '.json_encode($json));
 
-        $response = curl_exec($ch);
-      }
-      catch(\Exception $e) {
-        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Curl-Error: %s'), $hostname, $e->getMessage()));
-        return;
-      }
+    try {
+      $ch = curl_init();
+
+      curl_setopt($ch, CURLOPT_URL, 'https://api.indexnow.org/indexnow');
+      curl_setopt($ch, CURLOPT_POST, 1);
+      curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json; charset=utf-8'
+      ));
+      curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($json));
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+      curl_setopt($ch, CURLOPT_HEADER, 1);
+
+      $response = curl_exec($ch);
 
       $http_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
       curl_close($ch);
-
-      // Binding IN is tricky... See https://phpdelusions.net/pdo#in
-      $params = [':response' => $http_status];
-      $in = '';
-      $i = 0;
-      $in_params = [];
-
-      foreach ($ids[$hostname] as $item) {
-          $key = ':id'.$i++;
-          $in .= ($in ? ',' : '') . $key; // :id0,:id1,:id2
-          $in_params[$key] = $item; // collecting values into a key-value array
-      }
-      $in = rtrim($in, ','); // :id0,:id1,:id2
-
-      // Update database
-      try {
-        $sql = '
-          UPDATE
-            index_now
-          SET
-            response = :response,
-            submitted = CURRENT_TIMESTAMP
-          WHERE
-            id IN ('.$in.')
-        ';
-
-        $query = $this->wire()->database->prepare($sql);
-        $query->execute(array_merge($params, $in_params));
-
-      } catch(\Exception $e) {
-        $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Error: %s'), $hostname, $e->getMessage()));
-        return;
-      }
-    
+    }
+    catch(\Exception $e) {
+      $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Curl-Error: %s'), $hostname, $e->getMessage()));
+      return;
     }
 
+
+    // Binding IN is tricky... See https://phpdelusions.net/pdo#in
+    $params = [':response' => $http_status];
+    $in = '';
+    $i = 0;
+    $in_params = [];
+
+    foreach ($ids as $item) {
+        $key = ':id'.$i++;
+        $in .= ($in ? ',' : '') . $key; // :id0,:id1,:id2
+        $in_params[$key] = $item; // collecting values into a key-value array
+    }
+    $in = rtrim($in, ','); // :id0,:id1,:id2
+
+    // Update database
+    try {
+      $sql = '
+        UPDATE
+          index_now
+        SET
+          submitted = CURRENT_TIMESTAMP,
+          response = :response
+        WHERE
+          id IN ('.$in.')
+      ';
+
+      $this->wire()->log('IndexNow: sql: '.$sql);
+
+      $query = $this->wire()->database->prepare($sql);
+      $query->execute(array_merge($params, $in_params));
+
+    } catch(\Exception $e) {
+      $this->wire()->log(sprintf($this->_('[IndexNow Cron %s] Database-Error: %s'), $hostname, $e->getMessage()));
+      return;
+    }
+  
     // cleanup old successful entries
     try {
       $sql = '
@@ -208,7 +219,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
 
     if(
       !in_array($page -> template -> name, $this -> get('indexNowAllowedTemplates')) // not allowed template
-      OR  $page->rootParent()->id === 2 // admin page)
+      OR  $page->rootParent()->id === 2 // admin page
       OR  $page->isHidden() // hidden page
       OR  $page->isUnpublished() // unpublished page
       OR !$page->isPublic() // public and viewable by all
@@ -227,26 +238,23 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
         $sql = '
           INSERT INTO index_now (
             pages_id,
-            hostname,
             url,
             saved
           )
           VALUES(
             :pageid,
-            :hostname,
             :url,
             CURRENT_TIMESTAMP
           )
           ON DUPLICATE KEY UPDATE
             saved = CURRENT_TIMESTAMP,
             response = null,
-            submitted = 0
+            submitted = null
         ';
 
         $query = $this->wire()->database->prepare($sql);
 
         $query->bindValue(':pageid',    $page->id, \PDO::PARAM_INT);
-        $query->bindValue(':hostname',  parse_url($uri, PHP_URL_SCHEME).'://'.parse_url($uri, PHP_URL_HOST), \PDO::PARAM_STR);
         $query->bindValue(':url',       $uri, \PDO::PARAM_STR);
 
         $query->execute();
@@ -465,14 +473,12 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
         CREATE TABLE index_now (
           id int UNSIGNED NOT NULL AUTO_INCREMENT,
           pages_id int UNSIGNED NOT NULL,
-          hostname TEXT,
           url TEXT,
           saved TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           response int UNSIGNED,
           submitted TIMESTAMP NULL DEFAULT null,
           PRIMARY KEY (id),
           INDEX url (url (:maxIndexLengthIndex)),
-          INDEX submitted (submitted),
           UNIQUE unique_url(url(:maxIndexLengthUnique))
         )
       ';

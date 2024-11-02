@@ -48,6 +48,7 @@ class IndexNow extends WireData implements Module, ConfigurableModule {
     $this->pages->addHookAfter('Pages::save',   $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::add',    $this, 'processPageUpdate');
     $this->pages->addHookAfter('Pages::new',    $this, 'processPageUpdate');
+    $this->pages->addHookAfter('Pages::moved',  $this, 'processPageUpdate');
     
     // before as the page is not public anymore after trashing
     $this->pages->addHookBefore('Pages::trash', $this, 'processPageUpdate');
